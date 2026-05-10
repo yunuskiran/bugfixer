@@ -19,7 +19,7 @@ def sample_log_entries() -> list[LogEntry]:
         LogEntry(
             timestamp=datetime(2024, 6, 1, 11, 59, 50, tzinfo=timezone.utc),
             level="WARN",
-            message="Database connection pool exhausted, retrying…",
+            message="Database connection pool exhausted, retrying...",
             source="FileLog:/var/log/app.log",
             properties={"pool_size": 10, "waiting": 25},
         ),

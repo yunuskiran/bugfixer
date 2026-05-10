@@ -16,6 +16,12 @@ _TS_PATTERNS = [
 ]
 _LEVEL_PATTERN = re.compile(r"\b(DEBUG|INFO|WARN(?:ING)?|ERROR|CRITICAL|FATAL|TRACE)\b", re.IGNORECASE)
 
+_JSON_RESERVED_KEYS = frozenset({
+    "timestamp", "@t", "time", "Timestamp",
+    "level", "@l", "Level", "severity",
+    "message", "@m", "Message", "msg",
+})
+
 
 def _parse_timestamp(text: str) -> datetime:
     for pattern in _TS_PATTERNS:
@@ -92,7 +98,7 @@ class FileLogConnector(BaseLogConnector):
                     ts = datetime.now(timezone.utc)
                 level = obj.get("level") or obj.get("@l") or obj.get("Level") or obj.get("severity") or "INFO"
                 msg = obj.get("message") or obj.get("@m") or obj.get("Message") or obj.get("msg") or line
-                props = {k: v for k, v in obj.items() if k not in {"timestamp", "@t", "time", "Timestamp", "level", "@l", "Level", "severity", "message", "@m", "Message", "msg"}}
+                props = {k: v for k, v in obj.items() if k not in _JSON_RESERVED_KEYS}
                 return LogEntry(
                     timestamp=ts,
                     level=str(level).upper(),
