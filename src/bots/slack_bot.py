@@ -2,6 +2,7 @@ from __future__ import annotations
 import logging
 import re
 from slack_bolt.async_app import AsyncApp
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from ..agent.core import SupportAgent
 
 logger = logging.getLogger(__name__)
