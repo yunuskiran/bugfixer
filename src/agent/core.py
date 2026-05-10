@@ -12,9 +12,18 @@ from ..connectors.base import BaseLogConnector, LogEntry
 from ..connectors.seq import SeqConnector
 from ..connectors.azure_insights import AzureInsightsConnector
 from ..connectors.file_log import FileLogConnector
+from ..connectors.loki import LokiConnector
+from ..connectors.sentry import SentryConnector
+from ..connectors.datadog import DatadogConnector
 from ..trackers.base import BaseTracker, WorkItem
 from ..trackers.jira import JiraTracker
 from ..trackers.azure_devops import AzureDevOpsTracker
+from ..trackers.linear import LinearTracker
+from ..trackers.pagerduty import PagerDutyTracker
+from ..trackers.github_issues import GitHubIssuesTracker
+from ..enrichers.base import BaseEnricher, Enrichment
+from ..enrichers.correlation import CorrelationEnricher
+from ..enrichers.trend import TrendEnricher
 from .prompts import ROOT_CAUSE_PROMPT, ISSUE_SEARCH_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -27,15 +36,26 @@ class AnalysisResult:
     log_entries: list[LogEntry] = field(default_factory=list)
     related_items: list[dict] = field(default_factory=list)
     sources_queried: list[str] = field(default_factory=list)
+    enrichments: list[Enrichment] = field(default_factory=list)
     error: str | None = None
 
 
 class SupportAgent:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        extra_connectors: list[BaseLogConnector] | None = None,
+        extra_trackers: list[BaseTracker] | None = None,
+    ) -> None:
         self._settings = settings
         self._openai = AsyncOpenAI(api_key=settings.openai_api_key)
-        self._connectors: list[BaseLogConnector] = self._build_connectors(settings)
-        self._trackers: list[BaseTracker] = self._build_trackers(settings)
+        self._connectors: list[BaseLogConnector] = (
+            self._build_connectors(settings) + (extra_connectors or [])
+        )
+        self._trackers: list[BaseTracker] = (
+            self._build_trackers(settings) + (extra_trackers or [])
+        )
+        self._enrichers: list[BaseEnricher] = self._build_enrichers()
 
     # ------------------------------------------------------------------
     # Factory helpers
@@ -61,6 +81,33 @@ class SupportAgent:
         if paths:
             connectors.append(FileLogConnector(paths=paths))
             logger.info("FileLog connector enabled with %d path(s)", len(paths))
+        if settings.loki_url:
+            connectors.append(
+                LokiConnector(
+                    url=settings.loki_url,
+                    user=settings.loki_user,
+                    password=settings.loki_password,
+                )
+            )
+            logger.info("Loki connector enabled")
+        if settings.sentry_auth_token and settings.sentry_org and settings.sentry_project:
+            connectors.append(
+                SentryConnector(
+                    auth_token=settings.sentry_auth_token,
+                    org=settings.sentry_org,
+                    project=settings.sentry_project,
+                )
+            )
+            logger.info("Sentry connector enabled")
+        if settings.datadog_api_key and settings.datadog_app_key:
+            connectors.append(
+                DatadogConnector(
+                    api_key=settings.datadog_api_key,
+                    app_key=settings.datadog_app_key,
+                    site=settings.datadog_site,
+                )
+            )
+            logger.info("Datadog connector enabled")
         if not connectors:
             logger.warning("No log connectors configured — analysis will have no log data")
         return connectors
@@ -87,9 +134,23 @@ class SupportAgent:
                 )
             )
             logger.info("Azure DevOps tracker enabled")
+        if settings.linear_api_key:
+            trackers.append(LinearTracker(api_key=settings.linear_api_key))
+            logger.info("Linear tracker enabled")
+        if settings.pagerduty_api_key:
+            trackers.append(PagerDutyTracker(api_key=settings.pagerduty_api_key))
+            logger.info("PagerDuty tracker enabled")
+        repos = settings.github_repos_list
+        if settings.github_token and repos:
+            trackers.append(GitHubIssuesTracker(token=settings.github_token, repos=repos))
+            logger.info("GitHub Issues tracker enabled with %d repo(s)", len(repos))
         if not trackers:
             logger.warning("No work-item trackers configured")
         return trackers
+
+    @staticmethod
+    def _build_enrichers() -> list[BaseEnricher]:
+        return [CorrelationEnricher(), TrendEnricher()]
 
     # ------------------------------------------------------------------
     # Core analysis
@@ -185,7 +246,7 @@ class SupportAgent:
                         })
             related_items = related_items[:10]
 
-        return AnalysisResult(
+        result = AnalysisResult(
             root_cause=root_cause or analysis_text,
             suggested_fix=suggested_fix,
             log_entries=top_entries,
@@ -193,9 +254,33 @@ class SupportAgent:
             sources_queried=sources_queried,
         )
 
+        # 6. Run enrichers concurrently
+        enrichment_results: list[Enrichment] = []
+        if self._enrichers:
+            enrichments = await asyncio.gather(
+                *[
+                    self._safe_enrich(enricher, result, question)
+                    for enricher in self._enrichers
+                ],
+                return_exceptions=False,
+            )
+            enrichment_results = list(enrichments)
+        result.enrichments = enrichment_results
+
+        return result
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    async def _safe_enrich(
+        self, enricher: BaseEnricher, result: AnalysisResult, question: str
+    ) -> Enrichment:
+        try:
+            return await enricher.enrich(result, question, self._connectors)
+        except Exception as exc:
+            logger.warning("Enricher %s failed: %s", type(enricher).__name__, exc)
+            return Enrichment(name=enricher.plugin_name or type(enricher).__name__, summary="")
 
     async def _safe_search(self, connector: BaseLogConnector, query: str) -> list[LogEntry]:
         try:
@@ -256,6 +341,12 @@ class SupportAgent:
             for item in result.related_items[:5]:
                 lines.append(f"• <{item['url']}|[{item['id']}] {item['title']}> — {item['status']}")
 
+        for enrichment in result.enrichments:
+            if enrichment.summary:
+                icon = "🔗" if enrichment.name == "correlation" else "📈"
+                lines.append("")
+                lines.append(f"*{icon} {enrichment.name.title()} Analysis*\n{enrichment.summary}")
+
         if result.error:
             lines.append("")
             lines.append(f"⚠️ _Partial result — error: {result.error}_")
@@ -292,6 +383,22 @@ class SupportAgent:
                 body.append({
                     "type": "TextBlock",
                     "text": f"• [{item['id']}] {item['title']} — {item['status']}",
+                    "wrap": True,
+                })
+
+        for enrichment in result.enrichments:
+            if enrichment.summary:
+                icon = "🔗" if enrichment.name == "correlation" else "📈"
+                body.append({
+                    "type": "TextBlock",
+                    "text": f"**{icon} {enrichment.name.title()} Analysis**",
+                    "weight": "bolder",
+                    "wrap": True,
+                })
+                body.append({
+                    "type": "TextBlock",
+                    "text": enrichment.summary,
+                    "isSubtle": True,
                     "wrap": True,
                 })
 

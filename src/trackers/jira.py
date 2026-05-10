@@ -12,7 +12,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class JiraTracker(BaseTracker):
+class JiraTracker(BaseTracker, plugin_name="jira"):
     def __init__(self, url: str, email: str, api_token: str, project_key: str) -> None:
         self._url = url
         self._email = email

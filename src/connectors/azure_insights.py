@@ -7,7 +7,7 @@ from .base import BaseLogConnector, LogEntry
 logger = logging.getLogger(__name__)
 
 
-class AzureInsightsConnector(BaseLogConnector):
+class AzureInsightsConnector(BaseLogConnector, plugin_name="azure_insights"):
     def __init__(
         self,
         connection_string: str,

@@ -7,7 +7,7 @@ from .base import BaseLogConnector, LogEntry
 logger = logging.getLogger(__name__)
 
 
-class SeqConnector(BaseLogConnector):
+class SeqConnector(BaseLogConnector, plugin_name="seq"):
     def __init__(self, url: str, api_key: str | None = None) -> None:
         self._url = url.rstrip("/")
         self._api_key = api_key

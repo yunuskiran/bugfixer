@@ -50,7 +50,7 @@ def _parse_level(text: str) -> str:
     return m.group(1).upper() if m else "INFO"
 
 
-class FileLogConnector(BaseLogConnector):
+class FileLogConnector(BaseLogConnector, plugin_name="file_log"):
     def __init__(self, paths: list[str]) -> None:
         self._paths = paths
 

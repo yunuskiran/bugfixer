@@ -77,6 +77,20 @@ def mock_settings() -> MagicMock:
     settings.azure_devops_url = None
     settings.azure_devops_pat = None
     settings.azure_devops_project = None
+    settings.loki_url = None
+    settings.loki_user = None
+    settings.loki_password = None
+    settings.sentry_auth_token = None
+    settings.sentry_org = None
+    settings.sentry_project = None
+    settings.datadog_api_key = None
+    settings.datadog_app_key = None
+    settings.datadog_site = "datadoghq.com"
+    settings.linear_api_key = None
+    settings.pagerduty_api_key = None
+    settings.github_token = None
+    settings.github_repos = None
+    settings.github_repos_list = []
     settings.log_level = "INFO"
     return settings
 

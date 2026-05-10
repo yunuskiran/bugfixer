@@ -7,7 +7,7 @@ from .base import BaseTracker, WorkItem
 logger = logging.getLogger(__name__)
 
 
-class AzureDevOpsTracker(BaseTracker):
+class AzureDevOpsTracker(BaseTracker, plugin_name="azure_devops"):
     def __init__(self, url: str, pat: str, project: str) -> None:
         self._url = url.rstrip("/")
         self._project = project

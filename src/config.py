@@ -43,6 +43,31 @@ class Settings(BaseSettings):
     azure_devops_pat: Optional[str] = Field(None, alias="AZURE_DEVOPS_PAT")
     azure_devops_project: Optional[str] = Field(None, alias="AZURE_DEVOPS_PROJECT")
 
+    # Grafana Loki
+    loki_url: Optional[str] = Field(None, alias="LOKI_URL")
+    loki_user: Optional[str] = Field(None, alias="LOKI_USER")
+    loki_password: Optional[str] = Field(None, alias="LOKI_PASSWORD")
+
+    # Sentry
+    sentry_auth_token: Optional[str] = Field(None, alias="SENTRY_AUTH_TOKEN")
+    sentry_org: Optional[str] = Field(None, alias="SENTRY_ORG")
+    sentry_project: Optional[str] = Field(None, alias="SENTRY_PROJECT")
+
+    # Datadog
+    datadog_api_key: Optional[str] = Field(None, alias="DATADOG_API_KEY")
+    datadog_app_key: Optional[str] = Field(None, alias="DATADOG_APP_KEY")
+    datadog_site: str = Field("datadoghq.com", alias="DATADOG_SITE")
+
+    # Linear
+    linear_api_key: Optional[str] = Field(None, alias="LINEAR_API_KEY")
+
+    # PagerDuty
+    pagerduty_api_key: Optional[str] = Field(None, alias="PAGERDUTY_API_KEY")
+
+    # GitHub Issues
+    github_token: Optional[str] = Field(None, alias="GITHUB_TOKEN")
+    github_repos: Optional[str] = Field(None, alias="GITHUB_REPOS")
+
     # General
     log_level: str = Field("INFO", alias="LOG_LEVEL")
 
@@ -51,3 +76,9 @@ class Settings(BaseSettings):
         if not self.file_log_paths:
             return []
         return [p.strip() for p in self.file_log_paths.split(",") if p.strip()]
+
+    @property
+    def github_repos_list(self) -> list[str]:
+        if not self.github_repos:
+            return []
+        return [r.strip() for r in self.github_repos.split(",") if r.strip()]
