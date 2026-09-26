@@ -1,0 +1,10 @@
+services:
+  bugfixer:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    volumes:
+      - ./logs:/var/log/bugfixer
